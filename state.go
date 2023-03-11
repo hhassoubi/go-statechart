@@ -20,13 +20,17 @@ type EventCst[E any] interface {
 // Action Type function that takes the a pointer to Event as argument
 // `E` the event type
 // `PE` is deducted (Pointer to E)
+// `event` the event that triggered this action
 type Action[E any, PE EventCst[E]] func(event PE)
 
 // the abstract Action
+// `event` the event that triggered this action
 type BaseAction func(event Event)
 
 // A function that convert an Action to a BaseAction.
-// the new generated function will perform a down cast (safe)
+// the new generated function will perform a safe down cast
+// `action` the concrete action
+// returns the abstract action
 func ToBaseAction[E any, PE EventCst[E]](action Action[E, PE]) BaseAction {
 	if action == nil {
 		return nil
@@ -45,14 +49,17 @@ type ExitAction func()
 type ResultType int16
 
 const (
-	// Now, the index starts from 1
+	// Forwards the event to the parent state
 	FORWARD ResultType = iota
+	// Discards the event
 	DISCARD
+	// Transit to a new state
 	TRANSIT
+	// defer the event to be posted after state change
 	DEFER
 )
 
-// return result for a reaction
+// encapsulate the result for a reaction
 type ReactionResult struct {
 	status      ResultType
 	targetState interface{} // Proxy to the target state
@@ -101,27 +108,33 @@ type StateCst[S any, C any] interface {
 	State[C]
 }
 
-// `StateProxy` is a proxy for a state machine that allows you to transition between states and get
-// information about the state machine.
-//
-// The `Transit` method is used to transition between states. The `GetAncestor` method is used to get an
-// ancestor state from the state machine. The `GetContext` method is used to get the context of the state
-// machine. The `FindStateId` method is used to find a state id in the state machine.
+// StateProxy is a proxy for a state machine and state container. This is the main
+// mechanisms to access the state machine
 type StateProxy[C any] interface {
+	// Returns the name of the State
 	Name() string
+	// Returns an ancestor of the current state
 	GetAncestor(state StateId) State[C]
+	// Returns the user context
 	GetContext() *C
+	// Find the StateId of a state in the state machine
+	// It is ok to cache the stateId, to improve performance
+	// `selector` a function that is used to test if a state is a match
 	FindStateId(selector func(state State[C]) bool) StateId
+	// Create a transition result (only needed for custom reactions)
 	Transit(state StateId, action BaseAction) ReactionResult
+	// Create a forward result (only needed for custom reactions)
 	Forward() ReactionResult
+	// Create a discard result (only needed for custom reactions)
 	Discard() ReactionResult
+	// Create a defer result (only needed for custom reactions)
 	Defer() ReactionResult
 }
 
-// Finds the state id of the state that matches the State Type
+// Finds the state id of the state that matches the Concrete State Type
 // `S` is the actual user state
-// `C` is the user context
-// `PS` is deducted (pointer to `S`)
+// `C` is the user context (deducted)
+// `PS` is a pointer to `S` (deducted)
 // `proxy` is the proxy to the internal state in the machine
 func FindStateId[S any, C any, PS StateCst[S, C]](proxy StateProxy[C]) StateId {
 	selector := GeneticStateSelector[S, C, PS]
@@ -131,16 +144,32 @@ func FindStateId[S any, C any, PS StateCst[S, C]](proxy StateProxy[C]) StateId {
 // `StateSetupProxy` is a `StateProxy` that can add reactions and set the starting state.
 type StateSetupProxy[C any] interface {
 	StateProxy[C]
+	// Set the name of the state ( the default name is from reflect.TypeOf().Name() )
 	SetName(string)
+	// Add a state reaction
 	AddReaction(reaction EventReaction)
+	// Set a starting state (used for supper state)
 	SetStartingState(state StateId)
 }
 
+// Set a starting state using a State Type as a key
+// `S` is the actual user state
+// `C` is the user context (deducted)
+// `PS` is a pointer to `S` (deducted)
+// `proxy` is the proxy to the internal state in the machine
 func SetStartingState[S any, C any, PS StateCst[S, C]](state StateSetupProxy[C]) {
 	id := FindStateId[S, C, PS](state)
 	state.SetStartingState(id)
 }
 
+// Add a simple state transition
+// `E` is the event type
+// `S` is the actual user state that we are going to
+// `C` is the user context (deducted)
+// `PE` is a pointer to E (deducted)
+// `PS` is a pointer to `S` (deducted)
+// `from` is the proxy of the current state
+// `action` is the action associated with the transition (optional)
 func AddSimpleStateTransition[E any, S any, C any, PE EventCst[E], PS StateCst[S, C]](from StateSetupProxy[C], action Action[E, PE]) {
 	toId := FindStateId[S, C, PS](from)
 	reaction := func(e PE) ReactionResult {
@@ -149,10 +178,22 @@ func AddSimpleStateTransition[E any, S any, C any, PE EventCst[E], PS StateCst[S
 	from.AddReaction(MakeEventReaction(reaction))
 }
 
+// Add a custom reaction
+// `E` is the event type
+// `C` is the user context (deducted)
+// `PE` is a pointer to E (deducted)
+// `from` is the proxy of the current state
+// `reaction` is the custom reaction function
 func AddCustomStateReaction[E any, C any, PE EventCst[E]](from StateSetupProxy[C], reaction Reaction[E, PE]) {
 	from.AddReaction(MakeEventReaction(reaction))
 }
 
+// Add an in-state reaction
+// `E` is the event type
+// `C` is the user context (deducted)
+// `PE` is a pointer to E (deducted)
+// `state` is the proxy of the current state
+// `action` is the action function
 func AddInStateReaction[E any, C any, PE EventCst[E]](state StateSetupProxy[C], action Action[E, PE]) {
 	reaction := func(e PE) ReactionResult {
 		action(e)
@@ -161,18 +202,23 @@ func AddInStateReaction[E any, C any, PE EventCst[E]](state StateSetupProxy[C], 
 	state.AddReaction(MakeEventReaction(reaction))
 }
 
-func AddDiscard[E any, C any, PE EventCst[E]](state StateSetupProxy[C], action Action[E, PE]) {
+// Add a discard event reaction
+// `E` is the event type
+// `C` is the user context (deducted)
+// `PE` is a pointer to E (deducted)
+// `state` is the proxy of the current state
+func AddDiscard[E any, C any, PE EventCst[E]](state StateSetupProxy[C]) {
 	reaction := func(e PE) ReactionResult {
 		return ReactionResult{status: DISCARD}
 	}
 	state.AddReaction(MakeEventReaction(reaction))
 }
 
-// It returns true if the state is of type `*S`
+// Returns true if the state is of type `*S`
 // This is used to find a state by Type
 // `S` is the actual user state
-// `C` is the user context
-// `PS` is deducted (pointer to `S`)
+// `C` is the user context (deducted)
+// `PS` is pointer to S (deducted)
 func GeneticStateSelector[S any, C any, PS StateCst[S, C]](state State[C]) bool {
 	if _, ok := state.(PS); ok {
 		return true
@@ -180,7 +226,7 @@ func GeneticStateSelector[S any, C any, PS StateCst[S, C]](state State[C]) bool 
 	return false
 }
 
-// Default implementation of State[C]
+// Default implementation of State[C], This could be used to simplify the API in the concrete state
 type StateDefault[C any] struct {
 	proxy StateProxy[C]
 }
@@ -188,6 +234,7 @@ type StateDefault[C any] struct {
 func (*StateDefault[C]) isState() bool {
 	return true
 }
+
 func (s *StateDefault[C]) GetContext() *C {
 	return s.proxy.GetContext()
 }
@@ -198,6 +245,10 @@ func (s *StateDefault[C]) GetAncestor(state StateId) State[C] {
 // Initializing the state.
 func (s *StateDefault[C]) Init(proxy StateProxy[C]) {
 	s.proxy = proxy
+}
+
+func (s *StateDefault[C]) Proxy() StateProxy[C] {
+	return s.proxy
 }
 
 type EventDefault struct {
