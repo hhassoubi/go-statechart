@@ -51,9 +51,9 @@ type Idle struct {
 
 func (self *Idle) Setup(proxy statechart.StateSetupProxy[MyContext]) (statechart.EntryAction, statechart.ExitAction) {
 	self.Init(proxy)
-	// nil is for no action to take
-	// signature: AddSimpleStateTransition[EventType, ToStateType]( state State, action func(EventType) )
+	// Add transition to Active state on ActivateEv event (	nil is for no action to take)
 	statechart.AddSimpleStateTransition[ActivateEv, Active](proxy, nil)
+	// return nil, nill because no action is needed for Enter and Exit
 	return nil, nil
 }
 
@@ -64,8 +64,9 @@ type Active struct {
 
 func (self *Active) Setup(proxy statechart.StateSetupProxy[MyContext]) (statechart.EntryAction, statechart.ExitAction) {
 	self.Init(proxy)
-	// nil is for no action to take
+	// Add transition to Idle state (	nil is for no action to take)
 	statechart.AddSimpleStateTransition[DeactivateEv, Idle](proxy, nil)
+	// Add transition to Active state (	nil is for no action to take)
 	statechart.AddSimpleStateTransition[ResetEv, Active](proxy, nil)
 	// Add starting State to Transition to activated (optional). only needed for super states
 	// signature: AddStartingState[State](self)
@@ -85,7 +86,6 @@ type Stopped struct {
 
 func (self *Stopped) Setup(proxy statechart.StateSetupProxy[MyContext]) (statechart.EntryAction, statechart.ExitAction) {
 	self.Init(proxy)
-	// nil is for no action to take
 	statechart.AddSimpleStateTransition[StartStopEv, Running](proxy, nil)
 	return nil, nil
 }
@@ -97,9 +97,6 @@ type Running struct {
 
 func (self *Running) Setup(proxy statechart.StateSetupProxy[MyContext]) (statechart.EntryAction, statechart.ExitAction) {
 	self.Init(proxy)
-	// example of custom handler
-	// signature AddCustomReaction[EventType](state State, func(event EventType) Result)
-	//todo AddCustomReaction[StartStopEv](self, self.handleStartStop)
 	statechart.AddSimpleStateTransition[StartStopEv, Stopped](proxy, nil)
 	return self.Enter, self.Exit
 }
@@ -113,53 +110,21 @@ func (self *Running) Exit() {
 	self.GetContext().StopCounter()
 }
 
-func MakeStopWatch() *statechart.StateMachine[MyContext] {
-	s := MyContext{}
-	sm := statechart.MakeStateMachine(&s)
-	idleState := sm.AddState(&Idle{})
-	activeState := sm.AddState(&Active{})
-	sm.AddSubState(&Stopped{}, activeState)
-	sm.AddSubState(&Running{}, activeState)
-	sm.Initialize(idleState)
-
-	return &sm
-}
-
 func ExampleStateMachine() {
-	sm := MakeStopWatch()
-	// example
-	sm.DispatchEvent(&ActivateEv{})   // go for Idle to Active to Stopped
-	sm.DispatchEvent(&StartStopEv{})  // go from Stopped to Running
-	sm.DispatchEvent(&ResetEv{})      // go from Running to Active to Stopped
-	sm.DispatchEvent(&DeactivateEv{}) // go from Stopped to Idle
-	// output:
-	// Reset Counter
-	// Start Counter
-	// Stop Counter
-	// Reset Counter
-
-}
-
-func MakeAsyncStopWatch() *statechart.AsyncStateMachine[MyContext] {
-	s := MyContext{}
-	sm := statechart.MakeAsyncStateMachine(&s)
+	// Create State Machine
+	context := MyContext{}
+	sm := statechart.MakeStateMachine(&context)
 	idleState := sm.AddState(&Idle{})
 	activeState := sm.AddState(&Active{})
 	sm.AddSubState(&Stopped{}, activeState)
 	sm.AddSubState(&Running{}, activeState)
 	sm.Initialize(idleState)
 
-	return &sm
-}
-
-func ExampleAsyncStateMachine() {
-	sm := MakeAsyncStopWatch()
-	// example
+	// example event dispatch
 	sm.DispatchEvent(&ActivateEv{})   // go for Idle to Active to Stopped
 	sm.DispatchEvent(&StartStopEv{})  // go from Stopped to Running
 	sm.DispatchEvent(&ResetEv{})      // go from Running to Active to Stopped
 	sm.DispatchEvent(&DeactivateEv{}) // go from Stopped to Idle
-	sm.Close()                        // wait for all the event to be processed
 	// output:
 	// Reset Counter
 	// Start Counter
