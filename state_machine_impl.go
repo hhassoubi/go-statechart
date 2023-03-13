@@ -56,6 +56,10 @@ func (s *stateImpl[C]) Defer() ReactionResult {
 	return ReactionResult{status: DEFER}
 }
 
+func (s *stateImpl[C]) PostEvent(event Event) {
+	s.stateMachine.postedEvents = append(s.stateMachine.postedEvents, event)
+}
+
 func (s *stateImpl[C]) GetContext() *C {
 	return s.stateMachine.userContext
 }
@@ -126,11 +130,13 @@ func GetAncestor[S any, C any, PS StateCst[S, C]](state StateProxy[C]) *S {
 ////////////////////////////////////////////////////
 
 type stateMachineImpl[C any] struct {
-	states       []*stateImpl[C]
-	currentState *stateImpl[C]
-	DebugLogger  func(msg string, keysAndValues ...interface{})
-	userContext  *C
-	initialized  bool
+	states         []*stateImpl[C]
+	currentState   *stateImpl[C]
+	DebugLogger    func(msg string, keysAndValues ...interface{})
+	userContext    *C
+	initialized    bool
+	postedEvents   []Event
+	deferredEvents []Event
 }
 
 func (sm *stateMachineImpl[C]) addStateImpl(state State[C]) *stateImpl[C] {
@@ -192,7 +198,7 @@ func (sm *stateMachineImpl[C]) initialize(initStateId StateId) {
 		panic("Cannot call Initialize more then once")
 	}
 	sm.initialized = true
-
+	sm.postedEvents = make([]Event, 0, 10)
 	for _, state := range sm.states {
 		state.enterAction, state.exitAction = state.userState.Setup(state)
 		if len(state.name) == 0 {
@@ -206,14 +212,19 @@ func (sm *stateMachineImpl[C]) initialize(initStateId StateId) {
 }
 
 func (sm *stateMachineImpl[C]) dispatchEvent(event Event) {
-	nextState := processEvent(sm.currentState, sm.currentState, event)
-	if nextState != nil {
-		if sm.DebugLogger != nil {
-			sm.DebugLogger("Change State", "from", sm.currentState.name, "to", nextState.name)
+	// Add event to the queue first
+	sm.postedEvents = append(sm.postedEvents, event)
+	for i := 0; i < len(sm.postedEvents); i++ {
+		nextState := processEvent(sm.currentState, sm.currentState, sm.postedEvents[i])
+		if nextState != nil {
+			if sm.DebugLogger != nil {
+				sm.DebugLogger("Change State", "from", sm.currentState.name, "to", nextState.name)
+			}
+			sm.currentState = nextState
 		}
-		sm.currentState = nextState
 	}
-
+	// clear the queue
+	sm.postedEvents = sm.postedEvents[:0]
 }
 
 func processEvent[C any](currentState *stateImpl[C], activeState *stateImpl[C], event Event) *stateImpl[C] {

@@ -129,6 +129,8 @@ type StateProxy[C any] interface {
 	Discard() ReactionResult
 	// Create a defer result (only needed for custom reactions)
 	Defer() ReactionResult
+	// Post an event to the event queue that will be processed after the current reaction
+	PostEvent(event Event)
 }
 
 // Finds the state id of the state that matches the Concrete State Type
