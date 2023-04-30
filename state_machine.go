@@ -18,25 +18,25 @@ func MakeStateMachine[C any](userContext_ *C) StateMachine[C] {
 func (sm *StateMachine[C]) AddState(state State[C]) StateId {
 	sm.setupMutex.Lock()
 	defer sm.setupMutex.Unlock()
-	return sm.impl.addState(state)
+	return sm.impl.AddState(state)
 }
 
 func (sm *StateMachine[C]) AddSubState(state State[C], parentId StateId) StateId {
 	sm.setupMutex.Lock()
 	defer sm.setupMutex.Unlock()
-	return sm.impl.addSubState(state, parentId)
+	return sm.impl.AddSubState(state, parentId)
 }
 
 func (sm *StateMachine[C]) Initialize(initStateId StateId) {
 	sm.setupMutex.Lock()
 	defer sm.setupMutex.Unlock()
-	sm.impl.initialize(initStateId)
+	sm.impl.Initialize(initStateId)
 }
 
 func (sm *StateMachine[C]) DispatchEvent(event Event) {
 	sm.dispatchMutex.Lock()
 	defer sm.dispatchMutex.Unlock()
-	sm.impl.dispatchEvent(event)
+	sm.impl.DispatchEvent(event)
 }
 
 func (sm *StateMachine[C]) SetDebugLogger(logger func(msg string, keysAndValues ...interface{})) {

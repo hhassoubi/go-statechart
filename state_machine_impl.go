@@ -163,14 +163,14 @@ func (sm *stateMachineImpl[C]) getState(id StateId) *stateImpl[C] {
 	panic("State not found")
 }
 
-func (sm *stateMachineImpl[C]) addState(state State[C]) StateId {
+func (sm *stateMachineImpl[C]) AddState(state State[C]) StateId {
 	if sm.initialized {
 		panic("Cannot call AddState after calling Initialized")
 	}
 	return sm.addStateImpl(state).id
 }
 
-func (sm *stateMachineImpl[C]) addSubState(state State[C], parentId StateId) StateId {
+func (sm *stateMachineImpl[C]) AddSubState(state State[C], parentId StateId) StateId {
 	if sm.initialized {
 		panic("Cannot call AddSubState after calling Initialize")
 	}
@@ -193,7 +193,7 @@ func (sm *stateMachineImpl[C]) findStateId(selector func(state State[C]) bool) (
 	return 0, false
 }
 
-func (sm *stateMachineImpl[C]) initialize(initStateId StateId) {
+func (sm *stateMachineImpl[C]) Initialize(initStateId StateId) {
 	if sm.initialized {
 		panic("Cannot call Initialize more then once")
 	}
@@ -211,7 +211,7 @@ func (sm *stateMachineImpl[C]) initialize(initStateId StateId) {
 	sm.currentState = nextState
 }
 
-func (sm *stateMachineImpl[C]) dispatchEvent(event Event) {
+func (sm *stateMachineImpl[C]) DispatchEvent(event Event) {
 	// Add event to the queue first
 	sm.postedEvents = append(sm.postedEvents, event)
 	for i := 0; i < len(sm.postedEvents); i++ {
