@@ -250,10 +250,16 @@ func processEvent[C any](currentState *stateImpl[C], activeState *stateImpl[C], 
 		}
 		doEnters(nextState, lca)
 		// if the next state has a starting start
-		if nextState.isSuperState && nextState.startingState != nil {
-			doEnters(nextState.startingState, nextState)
-			nextState = nextState.startingState
+		if nextState.isSuperState {
+			if nextState.startingState != nil {
+				doEnters(nextState.startingState, nextState)
+				nextState = nextState.startingState
+			} else {
+				panic("Not a allowed in UML (SupperState cannot be current). Set a sub-state to initial state, or create an empty initial sate")
+				// TODO conditional to support this.
+			}
 		}
+
 		return nextState
 	case DEFER:
 		// TODO
