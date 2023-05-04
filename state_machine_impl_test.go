@@ -62,6 +62,10 @@ type OffEvent struct {
 	EventDefault
 }
 
+type ToggleEvent struct {
+	EventDefault
+}
+
 type TagEvent struct {
 	EventDefault
 }
@@ -78,6 +82,7 @@ type On struct {
 func (s *On) Setup(proxy StateSetupProxy[OnOffTestContext]) (EntryAction, ExitAction) {
 	s.Init(proxy)
 	AddSimpleStateTransition[OffEvent, Off](proxy, func(e *OffEvent) { s.GetContext().OnToOffAction.Call(e) })
+	AddSimpleStateTransition[ToggleEvent, Off](proxy, func(e *ToggleEvent) { s.GetContext().OnToOffAction.Call(e) })
 	AddSimpleStateTransition[TagEvent, OffLockTag](proxy, nil)
 	return func() { s.GetContext().OnEnter.Call() }, func() { s.GetContext().OnExit.Call() }
 }
@@ -90,6 +95,7 @@ func (s *Off) Setup(proxy StateSetupProxy[OnOffTestContext]) (EntryAction, ExitA
 	s.Init(proxy)
 	SetStartingState[OffDefault](proxy)
 	AddSimpleStateTransition[OnEvent, On](proxy, nil)
+	AddSimpleStateTransition[ToggleEvent, On](proxy, nil)
 	AddSimpleStateTransition[TagEvent, OffLockTag](proxy, nil)
 	return func() { s.GetContext().OffEnter.Call() }, func() { s.GetContext().OffExit.Call() }
 }
@@ -109,8 +115,10 @@ type OffLockTag struct {
 func (s *OffLockTag) Setup(proxy StateSetupProxy[OnOffTestContext]) (EntryAction, ExitAction) {
 	s.Init(proxy)
 	AddSimpleStateTransition[UnTagEvent, Off](proxy, nil)
-	AddDiscard[OnEvent](proxy)
+	// defer the on
+	AddDefer[OnEvent](proxy)
 	AddDiscard[OffEvent](proxy)
+	AddDiscard[ToggleEvent](proxy)
 	return func() { s.GetContext().TagEnter.Call() }, func() { s.GetContext().TagExit.Call() }
 }
 
@@ -153,7 +161,7 @@ func TestInit(t *testing.T) {
 	sm := MakeOnOffStateMachine(t, &ctx)
 	ctx.OffEnter.Reset(t, 1)
 	sm.Initialize(ctx.OffId)
-	assert.Equal(t, ctx.OffId, sm.currentState.id)
+	assert.Equal(t, ctx.OffDefaultId, sm.currentState.id)
 	ctx.OffEnter.Validate(1)
 
 	assert.Equal(t, sm.states[ctx.OffId].userState, sm.states[ctx.TagId].GetAncestor(ctx.OffId))
@@ -207,7 +215,7 @@ func TestSimpleTransitSubState(t *testing.T) {
 	ctx.OffExit.Validate(1)
 	ctx.TagEnter.Validate(1)
 	ctx.TagExit.Validate(0)
-	sm.DispatchEvent(&OnEvent{})
+	sm.DispatchEvent(&ToggleEvent{})
 	assert.Equal(t, ctx.TagId, sm.currentState.id)
 	sm.DispatchEvent(&OffEvent{})
 	assert.Equal(t, ctx.TagId, sm.currentState.id)
@@ -216,8 +224,50 @@ func TestSimpleTransitSubState(t *testing.T) {
 	assert.Equal(t, ctx.OffDefaultId, sm.currentState.id)
 	ctx.OnEnter.Validate(1)
 	ctx.OnExit.Validate(1)
-	ctx.OffEnter.Validate(3)
-	ctx.OffExit.Validate(2)
+	ctx.OffEnter.Validate(2)
+	ctx.OffExit.Validate(1)
+	ctx.TagEnter.Validate(1)
+	ctx.TagExit.Validate(1)
+
+}
+
+func TestDefer(t *testing.T) {
+	ctx := OnOffTestContext{}
+	ctx.OffEnter.ResetNoLimit(t)
+	ctx.OffExit.ResetNoLimit(t)
+	ctx.OnEnter.ResetNoLimit(t)
+	ctx.OnExit.ResetNoLimit(t)
+	ctx.OnToOffAction.ResetNoLimit(t)
+	ctx.TagEnter.ResetNoLimit(t)
+	ctx.TagExit.ResetNoLimit(t)
+
+	sm := MakeOnOffStateMachine(t, &ctx)
+	sm.Initialize(ctx.OffId)
+	sm.DispatchEvent(&TagEvent{})
+
+	ctx.OnEnter.Validate(0)
+	ctx.OnExit.Validate(0)
+	ctx.OffEnter.Validate(1)
+	ctx.OffExit.Validate(0)
+	ctx.TagEnter.Validate(1)
+	ctx.TagExit.Validate(0)
+
+	sm.DispatchEvent(&OnEvent{})
+	assert.Equal(t, ctx.TagId, sm.currentState.id)
+
+	ctx.OnEnter.Validate(0)
+	ctx.OnExit.Validate(0)
+	ctx.OffEnter.Validate(1)
+	ctx.OffExit.Validate(0)
+	ctx.TagEnter.Validate(1)
+	ctx.TagExit.Validate(0)
+
+	sm.DispatchEvent(&UnTagEvent{})
+	assert.Equal(t, ctx.OnId, sm.currentState.id)
+	ctx.OnEnter.Validate(1)
+	ctx.OnExit.Validate(0)
+	ctx.OffEnter.Validate(1)
+	ctx.OffExit.Validate(1)
 	ctx.TagEnter.Validate(1)
 	ctx.TagExit.Validate(1)
 

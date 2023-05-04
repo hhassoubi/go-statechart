@@ -207,6 +207,14 @@ func (sm *stateMachineImpl[C]) Initialize(initStateId StateId) {
 		}
 	}
 	nextState := sm.getState(initStateId)
+	if nextState.isSuperState {
+		if nextState.startingState != nil {
+			nextState = nextState.startingState
+		} else {
+			panic("Not a allowed in UML (SupperState cannot be current). Set a sub-state to initial state, or create an empty initial sate")
+			// TODO add build or library flag to support this.
+		}
+	}
 	doEnters(nextState, nil)
 	sm.currentState = nextState
 }
@@ -214,56 +222,69 @@ func (sm *stateMachineImpl[C]) Initialize(initStateId StateId) {
 func (sm *stateMachineImpl[C]) DispatchEvent(event Event) {
 	// Add event to the queue first
 	sm.postedEvents = append(sm.postedEvents, event)
-	for i := 0; i < len(sm.postedEvents); i++ {
-		nextState := processEvent(sm.currentState, sm.currentState, sm.postedEvents[i])
-		if nextState != nil {
+	for len(sm.postedEvents) > 0 {
+		result, nextState := processEvent(sm.currentState, sm.currentState, sm.postedEvents[0])
+		if result == TRANSIT {
 			if sm.DebugLogger != nil {
 				sm.DebugLogger("Change State", "from", sm.currentState.name, "to", nextState.name)
 			}
 			sm.currentState = nextState
+			if len(sm.deferredEvents) > 0 {
+				// push deferredEvents to the front of the queue
+				sm.postedEvents = append(sm.deferredEvents, sm.postedEvents[1:]...)
+				// clear deferredEvents
+				sm.deferredEvents = sm.deferredEvents[:0]
+				// force a start over
+				continue
+			}
+		} else if result == DEFER {
+			sm.deferredEvents = append(sm.deferredEvents, event)
 		}
+		// pop front
+		sm.postedEvents = sm.postedEvents[1:]
 	}
-	// clear the queue
-	sm.postedEvents = sm.postedEvents[:0]
+
 }
 
-func processEvent[C any](currentState *stateImpl[C], activeState *stateImpl[C], event Event) *stateImpl[C] {
+func processEvent[C any](currentState *stateImpl[C], activeState *stateImpl[C], event Event) (ResultType, *stateImpl[C]) {
 	result := activeState.processEvent(event)
 	switch result.status {
 	case FORWARD:
 		if activeState.parent != nil {
 			return processEvent(currentState, activeState.parent, event)
 		}
-		return nil
+		// The top state will discard
+		return DISCARD, nil
 	case DISCARD:
-		return nil
+		return DISCARD, nil
 	case TRANSIT:
 		if result.targetState == nil {
 			panic("next state is empty Transit was not call in the event handler")
 		}
 		nextState := result.targetState.(*stateImpl[C])
-		lca := findRoot(activeState, nextState)
-		//
-		doExits(currentState, lca)
-		if result.action != nil {
-			result.action(event)
-		}
-		doEnters(nextState, lca)
-		// if the next state has a starting start
+		// if the next state is supper state and has a starting start
 		if nextState.isSuperState {
 			if nextState.startingState != nil {
-				doEnters(nextState.startingState, nextState)
 				nextState = nextState.startingState
 			} else {
 				panic("Not a allowed in UML (SupperState cannot be current). Set a sub-state to initial state, or create an empty initial sate")
-				// TODO conditional to support this.
+				// TODO add build or library flag to support this.
 			}
 		}
+		// Find LCN
+		lca := findRoot(currentState, nextState)
+		// Run all the exits
+		doExits(currentState, lca)
+		// Run the action
+		if result.action != nil {
+			result.action(event)
+		}
+		// Run all the enters
+		doEnters(nextState, lca)
 
-		return nextState
+		return TRANSIT, nextState
 	case DEFER:
-		// TODO
-		return nil
+		return DEFER, nil
 	}
 	panic("Invalid ResultType")
 }

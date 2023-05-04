@@ -216,6 +216,18 @@ func AddDiscard[E any, C any, PE EventCst[E]](state StateSetupProxy[C]) {
 	state.AddReaction(MakeEventReaction(reaction))
 }
 
+// Add a defer event reaction
+// `E` is the event type
+// `C` is the user context (deducted)
+// `PE` is a pointer to E (deducted)
+// `state` is the proxy of the current state
+func AddDefer[E any, C any, PE EventCst[E]](state StateSetupProxy[C]) {
+	reaction := func(e PE) ReactionResult {
+		return ReactionResult{status: DEFER}
+	}
+	state.AddReaction(MakeEventReaction(reaction))
+}
+
 // Returns true if the state is of type `*S`
 // This is used to find a state by Type
 // `S` is the actual user state
