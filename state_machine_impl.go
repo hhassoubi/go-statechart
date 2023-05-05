@@ -262,26 +262,29 @@ func processEvent[C any](currentState *stateImpl[C], activeState *stateImpl[C], 
 			panic("next state is empty Transit was not call in the event handler")
 		}
 		nextState := result.targetState.(*stateImpl[C])
-		// if the next state is supper state and has a starting start
-		if nextState.isSuperState {
-			if nextState.startingState != nil {
-				nextState = nextState.startingState
-			} else {
-				panic("Not a allowed in UML (SupperState cannot be current). Set a sub-state to initial state, or create an empty initial sate")
-				// TODO add build or library flag to support this.
-			}
-		}
 		// Find LCN
 		lca := findRoot(currentState, nextState)
-		// Run all the exits
+		// Run all the exits not including lca
 		doExits(currentState, lca)
 		// Run the action
 		if result.action != nil {
 			result.action(event)
 		}
-		// Run all the enters
+		// Run all the enters not including lca
 		doEnters(nextState, lca)
-
+		// if the next state is supper state and has a starting start
+		if nextState.isSuperState {
+			if nextState.startingState != nil {
+				nextState = nextState.startingState
+				// run enter on initial state
+				if nextState.enterAction != nil {
+					nextState.enterAction()
+				}
+			} else {
+				panic("Not a allowed in UML (SupperState cannot be current). Set a sub-state to initial state, or create an empty initial sate")
+				// TODO add build or library flag to support this.
+			}
+		}
 		return TRANSIT, nextState
 	case DEFER:
 		return DEFER, nil

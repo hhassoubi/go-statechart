@@ -114,7 +114,7 @@ type OffLockTag struct {
 
 func (s *OffLockTag) Setup(proxy StateSetupProxy[OnOffTestContext]) (EntryAction, ExitAction) {
 	s.Init(proxy)
-	AddSimpleStateTransition[UnTagEvent, Off](proxy, nil)
+	AddSimpleStateTransition[UnTagEvent, OffDefault](proxy, nil)
 	// defer the on
 	AddDefer[OnEvent](proxy)
 	AddDiscard[OffEvent](proxy)
@@ -273,12 +273,33 @@ func TestDefer(t *testing.T) {
 
 }
 
-type CallOrderContext struct {
-	calls string
-}
-
 type TestEvent struct {
 	EventDefault
+}
+
+type TestState1 struct {
+	StateDefault[int]
+}
+
+func (s *TestState1) Setup(proxy StateSetupProxy[int]) (EntryAction, ExitAction) {
+	AddSimpleStateTransition[TestEvent, TestState1](proxy, nil)
+	onEnter := func() {
+		*(proxy.GetContext()) += 1
+	}
+	return onEnter, nil
+}
+
+func TestReenter(t *testing.T) {
+	ctx := 0
+	sm := stateMachineImpl[int]{userContext: &ctx}
+	id := sm.AddState(&TestState1{})
+	sm.Initialize(id)
+	sm.DispatchEvent(&TestEvent{})
+	assert.Equal(t, 2, ctx)
+}
+
+type CallOrderContext struct {
+	calls string
 }
 
 type StateA struct {
