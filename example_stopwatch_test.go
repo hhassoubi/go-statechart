@@ -13,19 +13,15 @@ import (
 type StartStopEv struct {
 	statechart.EventDefault
 }
-
 type ActivateEv struct {
 	statechart.EventDefault
 }
-
 type DeactivateEv struct {
 	statechart.EventDefault
 }
-
 type ResetEv struct {
 	statechart.EventDefault
 }
-
 type MyContext struct {
 }
 
@@ -33,12 +29,10 @@ func (*MyContext) StartCounter() {
 	// Start Counter Code
 	fmt.Println("Start Counter")
 }
-
 func (*MyContext) StopCounter() {
 	// Start Counter Code
 	fmt.Println("Stop Counter")
 }
-
 func (*MyContext) ResetCounter() {
 	// Start Counter Code
 	fmt.Println("Reset Counter")
@@ -73,7 +67,6 @@ func (self *Active) Setup(proxy statechart.StateSetupProxy[MyContext]) (statecha
 	statechart.SetStartingState[Stopped](proxy)
 	return self.Enter, nil
 }
-
 func (self *Active) Enter() {
 	// Reset Counter Code
 	self.GetContext().ResetCounter()
@@ -100,11 +93,9 @@ func (self *Running) Setup(proxy statechart.StateSetupProxy[MyContext]) (statech
 	statechart.AddSimpleStateTransition[StartStopEv, Stopped](proxy, nil)
 	return self.Enter, self.Exit
 }
-
 func (self *Running) Enter() {
 	self.GetContext().StartCounter()
 }
-
 func (self *Running) Exit() {
 	// Stop Counter Code
 	self.GetContext().StopCounter()

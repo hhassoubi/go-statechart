@@ -8,7 +8,9 @@ import (
 )
 
 // This Example Creates an Async State Machine. Please refer to [ExampleStateMachine]
-// the link over here https://github.com/hhassoubi/go-statechart/blob/master/async_state_machine.go
+// the full example over here https://github.com/hhassoubi/go-statechart/blob/master/async_state_machine.go
+//
+// [ExampleStateMachine]: https://pkg.go.dev/github.com/hhassoubi/go-statechart#example-StateMachine
 func ExampleAsyncStateMachine() {
 	// Refer to [https://github.com/hhassoubi/go-statechart/blob/master/async_state_machine.go]
 	// Create State Machine

@@ -4,6 +4,7 @@
 package statechart
 
 import (
+	"io"
 	"reflect"
 )
 
@@ -219,6 +220,15 @@ func (sm *stateMachineImpl[C]) Initialize(initStateId StateId) {
 	sm.currentState = nextState
 }
 
+func (sm *stateMachineImpl[C]) GenerateUml(w io.Writer, umlSyntax UmlSyntax, diagramType UmlDiagramType) {
+	if !sm.initialized {
+		panic("State Machine not Initialized")
+	}
+	if umlSyntax == PLANT_UML {
+		plantUmlPrint(w, sm, diagramType)
+	}
+
+}
 func (sm *stateMachineImpl[C]) DispatchEvent(event Event) {
 	// Add event to the queue first
 	sm.postedEvents = append(sm.postedEvents, event)
